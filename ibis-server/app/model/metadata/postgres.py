@@ -48,7 +48,11 @@ class PostgresMetadata(Metadata):
                 t.table_type IN ('BASE TABLE', 'VIEW')
                 AND t.table_schema NOT IN ('information_schema', 'pg_catalog');
             """
-        response = self.connection.sql(sql).to_pandas().to_dict(orient="records")
+        # Use raw_sql to avoid CREATE VIEW
+        with self.connection.raw_sql(sql) as cursor:
+            response = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            response = [dict(zip(columns, row)) for row in response]
 
         unique_tables = {}
         for row in response:
@@ -99,7 +103,11 @@ class PostgresMetadata(Metadata):
                 ON ccu.constraint_name = tc.constraint_name
             WHERE tc.constraint_type = 'FOREIGN KEY'
             """
-        res = self.connection.sql(sql).to_pandas().to_dict(orient="records")
+        # Use raw_sql to avoid CREATE VIEW
+        with self.connection.raw_sql(sql) as cursor:
+            results = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            res = [dict(zip(columns, row)) for row in results]
         constraints = []
         for row in res:
             constraints.append(
@@ -124,7 +132,10 @@ class PostgresMetadata(Metadata):
         return constraints
 
     def get_version(self) -> str:
-        return self.connection.sql("SELECT version()").to_pandas().iloc[0, 0]
+        # Use raw_sql to avoid CREATE VIEW
+        with self.connection.raw_sql("SELECT version()") as cursor:
+            result = cursor.fetchone()
+            return result[0] if result else "Unknown"
 
     def _format_postgres_compact_table_name(self, schema: str, table: str):
         return f"{schema}.{table}"
