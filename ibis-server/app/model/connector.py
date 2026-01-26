@@ -83,6 +83,8 @@ class Connector:
             self._connector = MSSqlConnector(connection_info)
         elif data_source == DataSource.canner:
             self._connector = CannerConnector(connection_info)
+        elif data_source == DataSource.postgres:
+            self._connector = PostgresConnector(connection_info)
         elif data_source == DataSource.bigquery:
             self._connector = BigQueryConnector(connection_info)
         elif data_source in {
@@ -503,7 +505,40 @@ class CannerConnector(IbisConnector):
         return postgres_compiler.type_mapper.from_string(type_name)
 
 
-class BigQueryConnector(ConnectorABC):
+class PostgresConnector:
+    def __init__(self, connection_info: ConnectionInfo):
+        self.connection = DataSource.postgres.get_connection(connection_info)
+
+    @tracer.start_as_current_span("connector_query", kind=trace.SpanKind.CLIENT)
+    def query(self, sql: str, limit: int) -> pd.DataFrame:
+        # PostgreSQL does not need to create temporary view for getting schema
+        # Similar to CannerConnector, we get schema without using CREATE TEMPORARY VIEW
+        schema = self._get_schema(sql)
+        return self.connection.sql(sql, schema=schema).limit(limit).to_pandas()
+
+    @tracer.start_as_current_span("connector_dry_run", kind=trace.SpanKind.CLIENT)
+    def dry_run(self, sql: str) -> Any:
+        # Query with limit zero to validate SQL without creating temporary view
+        # PostgreSQL requires an alias for subqueries
+        return self.connection.raw_sql(f"SELECT * FROM ({sql}) AS subquery LIMIT 0")
+
+    @tracer.start_as_current_span("get_schema", kind=trace.SpanKind.CLIENT)
+    def _get_schema(self, sql: str) -> sch.Schema:
+        cur = self.dry_run(sql)
+        type_names = _get_pg_type_names(self.connection)
+        return ibis.schema(
+            {
+                desc.name: self._to_ibis_type(type_names[desc.type_code])
+                for desc in cur.description
+            }
+        )
+
+    @staticmethod
+    def _to_ibis_type(type_name: str) -> dt.DataType:
+        return postgres_compiler.type_mapper.from_string(type_name)
+
+
+class BigQueryConnector(SimpleConnector):
     def __init__(self, connection_info: ConnectionInfo):
         self.data_source = DataSource.bigquery
         self.connection_info = connection_info
