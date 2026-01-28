@@ -91,10 +91,12 @@ class ExtensionHandler:
             JOIN
                 pg_namespace n ON n.oid = e.extnamespace;
             """
-        df = self.connection.sql(sql).to_pandas()
-        if df.empty:
-            return []
-        response = df.to_dict(orient="records")
+        with self.connection.raw_sql(sql) as cursor:
+            results = cursor.fetchall()
+            if not results:
+                return []
+            columns = [desc[0] for desc in cursor.description]
+            response = [dict(zip(columns, row)) for row in results]
         return response
 
     def postgis_handler(self, tables: list[Table], schema_name: str) -> list[Table]:
@@ -116,7 +118,10 @@ class ExtensionHandler:
             FROM
                 {schema_name}.geography_columns;
             """
-        response = self.connection.sql(sql).to_pandas().to_dict(orient="records")
+        with self.connection.raw_sql(sql) as cursor:
+            results = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            response = [dict(zip(columns, row)) for row in results]
 
         # Update tables
         for row in response:
