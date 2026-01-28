@@ -443,7 +443,10 @@ class PostgresConnector:
         # PostgreSQL does not need to create temporary view for getting schema
         # Similar to CannerConnector, we get schema without using CREATE TEMPORARY VIEW
         schema = self._get_schema(sql)
-        return self.connection.sql(sql, schema=schema).limit(limit).to_pyarrow()
+        # Convert to pandas first to handle PostgreSQL decimals, then to pyarrow
+        # Direct to_pyarrow() fails with "Rescaling Decimal value would cause data loss"
+        df = self.connection.sql(sql, schema=schema).limit(limit).to_pandas()
+        return pa.Table.from_pandas(df)
 
     @tracer.start_as_current_span("connector_dry_run", kind=trace.SpanKind.CLIENT)
     def dry_run(self, sql: str) -> Any:
