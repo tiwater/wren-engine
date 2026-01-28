@@ -439,11 +439,11 @@ class PostgresConnector:
         self.connection = DataSource.postgres.get_connection(connection_info)
 
     @tracer.start_as_current_span("connector_query", kind=trace.SpanKind.CLIENT)
-    def query(self, sql: str, limit: int) -> pd.DataFrame:
+    def query(self, sql: str, limit: int) -> pa.Table:
         # PostgreSQL does not need to create temporary view for getting schema
         # Similar to CannerConnector, we get schema without using CREATE TEMPORARY VIEW
         schema = self._get_schema(sql)
-        return self.connection.sql(sql, schema=schema).limit(limit).to_pandas()
+        return self.connection.sql(sql, schema=schema).limit(limit).to_pyarrow()
 
     @tracer.start_as_current_span("connector_dry_run", kind=trace.SpanKind.CLIENT)
     def dry_run(self, sql: str) -> Any:
