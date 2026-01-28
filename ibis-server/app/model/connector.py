@@ -538,6 +538,10 @@ class PostgresConnector:
         return postgres_compiler.type_mapper.from_string(type_name)
 
 
+class SimpleConnector(ConnectorABC):
+    pass
+
+
 class BigQueryConnector(SimpleConnector):
     def __init__(self, connection_info: ConnectionInfo):
         self.data_source = DataSource.bigquery
